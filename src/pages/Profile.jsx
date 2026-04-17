@@ -32,7 +32,7 @@ function getModeEmoji(mode) {
 
 function Profile() {
   const navigate = useNavigate()
-  const { user, loading: authLoading } = useAuth()
+  const { user, session, loading: authLoading } = useAuth()
   
   const [savedRoutes, setSavedRoutes] = useState([])
   const [routesLoading, setRoutesLoading] = useState(true)
@@ -47,7 +47,7 @@ function Profile() {
   useEffect(() => {
     if (authLoading) return
     
-    if (!user?.id) {
+    if (!session?.user?.id) {
       navigate('/login', { replace: true })
       return
     }
@@ -56,16 +56,16 @@ function Profile() {
       try {
         setRoutesLoading(true)
         const { data, error } = await supabase
-          .from('saved_routes')
+          .from('trips')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', session.user.id)
           .order('created_at', { ascending: false })
           .limit(20)
 
         if (error) throw error
         setSavedRoutes(data || [])
       } catch (error) {
-        console.error('Error loading saved routes:', error)
+        console.error('Error loading trips:', error)
         setSavedRoutes([])
       } finally {
         setRoutesLoading(false)
@@ -93,11 +93,18 @@ function Profile() {
     }
 
     loadLocation()
-  }, [user?.id, authLoading, navigate])
+  }, [session?.user?.id, authLoading, navigate])
 
-  if (authLoading || !user) {
+  if (authLoading || !session?.user) {
     return null
   }
+
+  const getUserDisplayName = useMemo(() => {
+    // Fallback chain: name → email prefix → default
+    if (user?.name) return user.name
+    if (session?.user?.email) return session.user.email.split('@')[0]
+    return 'User'
+  }, [user?.name, session?.user?.email])
 
   const initials = useMemo(() => {
     if (!user?.name) return 'MM'
@@ -106,7 +113,7 @@ function Profile() {
     return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase()
   }, [user?.name])
 
-  // Calculate aggregate stats from saved routes
+  // Calculate aggregate stats from trips
   const aggregateStats = useMemo(() => {
     if (!savedRoutes.length) {
       return {
@@ -120,7 +127,7 @@ function Profile() {
     const stats = {
       totalTrips: savedRoutes.length,
       totalCarbonSaved: Number(
-        savedRoutes.reduce((sum, route) => sum + (route.carbon_saved_kg || 0), 0).toFixed(2)
+        savedRoutes.reduce((sum, route) => sum + (route.carbon_saved || 0), 0).toFixed(2)
       ),
       totalDistance: Number(
         savedRoutes.reduce((sum, route) => sum + (route.distance_km || 0), 0).toFixed(1)
@@ -131,7 +138,7 @@ function Profile() {
     // Calculate most used mode
     const modeCounts = {}
     savedRoutes.forEach((route) => {
-      const mode = route.selected_mode || 'unknown'
+      const mode = route.transport_mode || 'unknown'
       modeCounts[mode] = (modeCounts[mode] || 0) + 1
     })
 
@@ -167,7 +174,7 @@ function Profile() {
   const handleDeleteRoute = async (tripId) => {
     try {
       const { error } = await supabase
-        .from('saved_routes')
+        .from('trips')
         .delete()
         .eq('id', tripId)
 
@@ -182,16 +189,16 @@ function Profile() {
 
   const uploadProfileImage = async (file) => {
     const { data } = await supabase.auth.getUser()
-    const user = data.user
+    const authUser = data.user
 
-    console.log("USER BEFORE UPLOAD:", user)
+    console.log("USER BEFORE UPLOAD:", authUser)
 
-    if (!user) {
+    if (!authUser) {
       console.error("User not authenticated")
       return
     }
 
-    const filePath = `${user.id}/${Date.now()}-${file.name}`
+    const filePath = `${authUser.id}/${Date.now()}-${file.name}`
 
     const { error } = await supabase.storage
       .from("avatars")
@@ -229,12 +236,12 @@ function Profile() {
     try {
       const publicUrl = await uploadProfileImage(file)
 
-      if (publicUrl) {
-        // Update profile in database
+      if (publicUrl && session?.user?.id) {
+        // Update profile in database using maybeSingle to avoid PGRST116
         const { error } = await supabase
           .from('profiles')
           .update({ profile_picture_url: publicUrl })
-          .eq('id', user.id)
+          .eq('id', session.user.id)
 
         if (error) throw error
 
@@ -320,9 +327,9 @@ function Profile() {
               {user?.profile_picture_url ? 'Change profile picture' : 'Add profile picture'}
             </label>
           </div>
-          <h1 className="text-3xl font-serif tracking-tight text-white">{user.name}</h1>
-          <p className="mt-2 text-sm text-white/80">{user.email || 'No email provided'}</p>
-          <p className="mt-4 text-sm text-white/75">🌍 {user.country || 'Unknown country'}</p>
+          <h1 className="text-3xl font-serif tracking-tight text-white">{getUserDisplayName}</h1>
+          <p className="mt-2 text-sm text-white/80">{session?.user?.email || 'No email provided'}</p>
+          <p className="mt-4 text-sm text-white/75">🌍 {user?.country || 'Unknown country'}</p>
           <button
             type="button"
             onClick={handleLogout}
@@ -554,33 +561,27 @@ function Profile() {
                         <div className="flex-1 space-y-3">
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="text-2xl">{getModeEmoji(route.selected_mode)}</span>
-                              <div>
-                                <p className="font-semibold text-emerald-700">
-                                  {route.selected_mode
-                                    ? route.selected_mode.charAt(0).toUpperCase() + route.selected_mode.slice(1)
-                                    : 'Trip'}
-                                </p>
-                                <p className="text-xs text-slate-500">{formatDate(route.created_at)}</p>
+                                <span className="text-2xl">{getModeEmoji(route.transport_mode)}</span>
+                                <div>
+                                  <p className="font-semibold text-emerald-700">
+                                    {route.transport_mode
+                                      ? route.transport_mode.charAt(0).toUpperCase() + route.transport_mode.slice(1)
+                                      : 'Trip'}
+                                  </p>
+                                  <p className="text-xs text-slate-500">{formatDate(route.created_at)}</p>
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-slate-300">{truncateText(route.origin_name, 30)}</span>
-                            <span className="text-slate-500">→</span>
-                            <span className="text-sm font-medium text-slate-300">{truncateText(route.destination_name, 30)}</span>
-                          </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-slate-300">{truncateText(route.from_location, 30)}</span>
+                              <span className="text-slate-500">→</span>
+                              <span className="text-sm font-medium text-slate-300">{truncateText(route.to_location, 30)}</span>
+                            </div>
 
-                          <div className="flex flex-wrap gap-3 text-sm text-slate-600">
-                            <span>📍 {Number(route.distance_km || 0).toFixed(1)} km</span>
-                            <span>⏱️ {Math.round(route.duration_minutes || 0)} min</span>
-                            <span>💰 {route.fare_formatted || 'Free'}</span>
-                            <span>💨 {Number(route.carbon_saved_kg || 0).toFixed(2)} kg CO₂</span>
-                          </div>
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-2">
+                            <div className="flex flex-wrap gap-3 text-sm text-slate-600">
+                              <span>📍 {Number(route.distance_km || 0).toFixed(1)} km</span>
+                              <span>💨 {Number(route.carbon_saved || 0).toFixed(2)} kg CO₂</span>
                           <button
                             type="button"
                             onClick={() => setDeleteConfirm({ tripId: route.id, show: true })}

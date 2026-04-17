@@ -11,13 +11,10 @@ function buildLocationErrorMessage(error) {
     return 'Unable to get your location. Please allow location access and try again.'
   }
 
-  console.error('Geolocation error:', {
-    code: error.code,
-    message: error.message,
-    type: error.code === 1 ? 'PERMISSION_DENIED' :
-          error.code === 2 ? 'POSITION_UNAVAILABLE' :
-          error.code === 3 ? 'TIMEOUT' : 'UNKNOWN'
-  })
+  // Suppress console spam - only log at debug level
+  if (error?.message) {
+    console.debug('Geolocation fallback:', error.message)
+  }
 
   switch (error.code) {
     case 1:
@@ -75,7 +72,7 @@ async function getGpsLocation() {
       if (error?.code === 1) {
         throw error
       }
-      console.warn('Native geolocation failed, falling through to web fallback:', error?.message || error)
+      console.debug('Native geolocation failed, falling through to web fallback')
     }
   }
 
@@ -85,7 +82,7 @@ async function getGpsLocation() {
   }
 
   if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-    console.warn('Geolocation requires HTTPS or localhost. Current protocol:', window.location.protocol)
+    console.debug('Geolocation requires HTTPS or localhost for best results')
   }
 
   const attemptGeolocation = async ({ enableHighAccuracy, timeout }) => {
@@ -106,14 +103,13 @@ async function getGpsLocation() {
       throw error
     }
 
-    console.warn('High accuracy geolocation failed:', { code: error?.code, message: error?.message })
+    console.debug('High accuracy geolocation failed, retrying...')
 
     if (error?.code === 2 || error?.code === 3) {
-      console.log('Retrying with lower accuracy...')
       try {
         return await attemptGeolocation({ enableHighAccuracy: false, timeout: 20000 })
       } catch (fallbackError) {
-        console.warn('Lower accuracy geolocation also failed:', { code: fallbackError?.code, message: fallbackError?.message })
+        console.debug('Lower accuracy geolocation failed, using IP fallback')
         throw fallbackError
       }
     }
@@ -124,7 +120,7 @@ async function getGpsLocation() {
 
 async function getIpLocation() {
   try {
-    console.log('Attempting IP-based location fallback...')
+    console.debug('Attempting IP-based location fallback...')
     const response = await fetch('https://ipapi.co/json/')
 
     if (!response.ok) {
@@ -148,7 +144,7 @@ async function getIpLocation() {
       source: 'ip',
     }
   } catch (error) {
-    console.warn('IP geolocation fallback failed:', error?.message || error)
+    console.debug('IP geolocation fallback failed, using default location')
     return null
   }
 }
@@ -156,23 +152,24 @@ async function getIpLocation() {
 async function getBestLocation() {
   try {
     const gpsLocation = await getGpsLocation()
-    console.log('Location source: gps')
+    console.debug('Location source: gps')
     return gpsLocation
   } catch (error) {
     if (error?.code === 1) {
+      // User denied permission - don't silently suppress
       console.error('Geolocation permission denied:', error.message)
       throw new Error(buildLocationErrorMessage(error))
     }
-    console.warn('GPS failed, attempting IP fallback:', error?.message || error)
+    console.debug('GPS location unavailable, trying IP fallback...')
   }
 
   const ipLocation = await getIpLocation()
   if (ipLocation) {
-    console.log('Location source: ip')
+    console.debug('Location source: ip')
     return ipLocation
   }
 
-  console.warn('All location methods failed. Using default.')
+  console.debug('All location methods failed. Using default.')
   return {
     lat: 28.6139,
     lng: 77.2090,
@@ -182,7 +179,7 @@ async function getBestLocation() {
 }
 
 async function getUserLocation() {
-  return getGpsLocation()
+  return getBestLocation()
 }
 
 async function reverseGeocode(lat, lng) {

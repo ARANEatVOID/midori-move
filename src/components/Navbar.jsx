@@ -2,8 +2,7 @@ import { AnimatePresence, motion, useScroll, useTransform } from 'framer-motion'
 import { Leaf, Menu, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { getSession, isSessionValid } from '../services/sessionService'
-import { getUserById } from '../services/userService'
+import { useAuth } from '../hooks/useAuth.jsx'
 import ThemeToggle from './ThemeToggle'
 
 const navItems = [
@@ -19,12 +18,21 @@ function getUserInitials(name) {
   return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase()
 }
 
+function getUserDisplay(user, session) {
+  if (user?.name) return user.name
+  if (session?.user?.email) {
+    const emailPrefix = session.user.email.split('@')[0]
+    return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1)
+  }
+  return 'User'
+}
+
 function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [profileUser, setProfileUser] = useState(null)
   const { scrollY } = useScroll()
   const location = useLocation()
   const navigate = useNavigate()
+  const { user, session, loading: authLoading, isLoggedIn } = useAuth()
   const navOpacity = useTransform(scrollY, [0, 80], [0.45, 0.88])
   const navBackground = useTransform(
     navOpacity,
@@ -32,28 +40,8 @@ function Navbar() {
   )
   const navBlur = useTransform(scrollY, [0, 80], ['blur(0px)', 'blur(16px)'])
 
-  useEffect(() => {
-    if (!isSessionValid()) {
-      setProfileUser(null)
-      return
-    }
-
-    try {
-      const session = getSession()
-      const parsedUser = getUserById(session?.userId)
-      setProfileUser({
-        name: parsedUser?.name || session?.name || '',
-        email: parsedUser?.email || '',
-        profilePicture: parsedUser?.profilePicture || '',
-      })
-    } catch (error) {
-      console.error('Error loading profile:', error)
-      setProfileUser(null)
-    }
-  }, [location.pathname, location.key])
-
   const renderAvatar = (sizeClasses = 'h-11 w-11', textClasses = 'text-sm') => {
-    if (!profileUser) return null
+    if (!isLoggedIn) return null
 
     return (
       <button
@@ -62,17 +50,17 @@ function Navbar() {
           setMobileOpen(false)
           navigate('/profile')
         }}
-        className={`inline-flex ${sizeClasses} items-center justify-center rounded-full bg-[#34c96c] font-bold text-white ${textClasses}`}
+        className={`inline-flex ${sizeClasses} items-center justify-center rounded-full bg-[#34c96c] font-bold text-white transition hover:shadow-lg hover:shadow-[#34c96c]/30 ${textClasses}`}
         aria-label="Profile"
       >
-        {profileUser.profilePicture ? (
+        {user?.profile_picture_url ? (
           <img
-            src={`data:image/png;base64,${profileUser.profilePicture}`}
-            alt={profileUser.name || 'Profile'}
+            src={user.profile_picture_url}
+            alt={user.name || 'Profile'}
             className="h-full w-full rounded-full object-cover"
           />
         ) : (
-          <span>{getUserInitials(profileUser.name)}</span>
+          <span>{getUserInitials(user?.name)}</span>
         )}
       </button>
     )
@@ -121,9 +109,28 @@ function Navbar() {
               </NavLink>
             ))}
             <ThemeToggle />
-            {profileUser ? (
-              renderAvatar()
+
+            {/* Auth State Section - Desktop */}
+            {authLoading ? (
+              /* Loading state: show minimal skeleton to prevent flickering */
+              <div className="flex items-center gap-3">
+                <div className="h-4 w-20 rounded-md bg-white/10 animate-pulse" />
+                <div className="h-11 w-11 rounded-full bg-white/10 animate-pulse" />
+              </div>
+            ) : isLoggedIn ? (
+              /* Logged In State */
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate('/profile')}
+                  className="text-sm font-medium text-white/80 transition hover:text-white"
+                >
+                  {getUserDisplay(user, session)}
+                </button>
+                {renderAvatar()}
+              </div>
             ) : (
+              /* Logged Out State */
               <div className="inline-flex items-center gap-3">
                 <Link to="/login" className="button-secondary px-4 py-2 text-sm font-semibold">
                   Login
@@ -168,43 +175,59 @@ function Navbar() {
             }}
           >
             <div className="container-shell flex flex-col gap-4 py-5">
-                {navItems.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    onClick={() => setMobileOpen(false)}
-                    className="text-base font-medium"
-                  >
-                    <span className="link-underline">{item.label}</span>
-                  </NavLink>
-                ))}
-                {profileUser ? (
-                  <div className="flex items-center justify-between rounded-[1.5rem] border border-emerald-200/70 bg-white/10 px-4 py-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{profileUser.name || 'Profile'}</p>
-                      <p className="text-xs text-slate-500">{profileUser.email || 'Your account'}</p>
-                    </div>
-                    {renderAvatar('h-12 w-12', 'text-base')}
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setMobileOpen(false)}
+                  className="text-base font-medium"
+                >
+                  <span className="link-underline">{item.label}</span>
+                </NavLink>
+              ))}
+
+              {/* Auth State Section - Mobile */}
+              {authLoading ? (
+                /* Loading state: show minimal skeleton to prevent flickering */
+                <div className="flex flex-col gap-3">
+                  <div className="h-6 w-24 rounded-md bg-white/10 animate-pulse" />
+                  <div className="h-12 w-12 rounded-full bg-white/10 animate-pulse" />
+                </div>
+              ) : isLoggedIn ? (
+                /* Logged In State */
+                <div
+                  className="flex items-center justify-between rounded-[1.5rem] border border-emerald-200/70 bg-white/10 px-4 py-3 cursor-pointer transition hover:bg-white/15"
+                  onClick={() => {
+                    setMobileOpen(false)
+                    navigate('/profile')
+                  }}
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{getUserDisplay(user, session)}</p>
+                    <p className="text-xs text-slate-500">{session?.user?.email || 'Your account'}</p>
                   </div>
-                ) : (
-                  <>
-                    <Link
-                      to="/login"
-                      onClick={() => setMobileOpen(false)}
-                      className="button-secondary w-full"
-                    >
-                      Login
-                    </Link>
-                    <Link
-                      to="/signup"
-                      onClick={() => setMobileOpen(false)}
-                      className="button-primary w-full"
-                    >
-                      Sign Up
-                    </Link>
-                  </>
-                )}
-              </div>
+                  {renderAvatar('h-12 w-12', 'text-base')}
+                </div>
+              ) : (
+                /* Logged Out State */
+                <>
+                  <Link
+                    to="/login"
+                    onClick={() => setMobileOpen(false)}
+                    className="button-secondary w-full"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/signup"
+                    onClick={() => setMobileOpen(false)}
+                    className="button-primary w-full"
+                  >
+                    Sign Up
+                  </Link>
+                </>
+              )}
+            </div>
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -213,3 +236,4 @@ function Navbar() {
 }
 
 export default Navbar
+

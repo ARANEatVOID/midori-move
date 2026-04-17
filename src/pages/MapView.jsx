@@ -17,9 +17,6 @@ import { getNearbyBusStops, getNearbyCycleRentals } from '../services/nearbyServ
 import { bookingLinks } from '../data/bookingLinks.js'
 import { fares } from '../data/fareData.js'
 import { carbonData } from '../data/carbonData.js'
-import { saveTrip } from '../services/tripService.js'
-import { getSession } from '../services/sessionService'
-import { getUserById } from '../services/userService'
 import { useAuth } from '../hooks/useAuth.jsx'
 import { supabase } from '../services/supabaseClient'
 
@@ -140,7 +137,7 @@ function getLocationStatusMessage(source) {
 function MapView() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, session } = useAuth()
   
   const [locationState, setLocationState] = useState({
     loading: false,
@@ -237,9 +234,8 @@ function MapView() {
 
     async function loadHomeAddressOrigin() {
       try {
-        const session = getSession()
-        const user = getUserById(session?.userId)
-        const homeAddress = user?.homeAddress?.trim()
+        // Use home_address from the profile fetched via useAuth
+        const homeAddress = user?.home_address?.trim()
 
         if (!homeAddress) {
           setHomeAddressOrigin(null)
@@ -268,7 +264,7 @@ function MapView() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [user?.home_address])
 
   // Restore origin/destination from router state (trip reuse)
   useEffect(() => {
@@ -552,93 +548,45 @@ function MapView() {
       )
     : {}
 
+  const showToast = (message, type = 'success', isClickable = false) => {
+    setRouteSaveToast({ show: true, message, type, isClickable })
+    window.setTimeout(() => {
+      setRouteSaveToast({ show: false, message: '', type: 'success', isClickable: false })
+    }, 3000)
+  }
+
   const handleConfirmTrip = async () => {
-    if (!origin || !destination || !selectedRoute) {
+    if (!origin || !destination || !selectedRoute) return
+
+    if (!session?.user?.id) {
+      showToast('Log in to save your routes →', 'info', true)
       return
     }
 
-    const saveResult = saveTrip({
-      id: String(Date.now()),
-      createdAt: Date.now(),
-      from: origin,
-      to: destination,
-      distance: selectedRoute.distanceKm,
-      duration: selectedRoute.durationMinutes,
-      mode: transportMode,
-      co2Saved: liveCo2Saved,
-    })
+    setTripSaveState({ status: 'success', message: 'Saving...' })
 
-    if (saveResult?.trip) {
-      setTripSaveState({
-        status: 'success',
-        message: 'Trip confirmed and saved to your history.',
+    try {
+      const { error } = await supabase.from('trips').insert({
+        user_id: session.user.id,
+        from_location: (fromValue || origin?.name || 'Unknown').slice(0, 255),
+        to_location: (toValue || destination?.name || 'Unknown').slice(0, 255),
+        transport_mode: transportMode,
+        distance_km: Number(selectedRoute.distanceKm) || 0,
+        carbon_saved: Number(liveCo2Saved) || 0,
       })
-    } else {
-      setTripSaveState({
-        status: 'error',
-        message: 'Unable to save this trip right now.',
-      })
-    }
 
-    // Save route to Supabase if user is logged in
-    if (user?.id) {
-      try {
-        const { error } = await supabase.from('saved_routes').insert({
-          user_id: user.id,
-          origin_name: fromValue,
-          destination_name: toValue,
-          origin_lat: origin.lat,
-          origin_lng: origin.lng,
-          dest_lat: destination.lat,
-          dest_lng: destination.lng,
-          selected_mode: transportMode,
-          distance_km: selectedRoute.distanceKm,
-          duration_minutes: selectedRoute.durationMinutes,
-          fare_formatted: selectedRoute.fare.formatted,
-          carbon_saved_kg: liveCo2Saved,
-        })
-
-        if (error) {
-          setRouteSaveToast({
-            show: true,
-            message: "Couldn't save route",
-            type: 'error',
-            isClickable: false,
-          })
-        } else {
-          setRouteSaveToast({
-            show: true,
-            message: 'Route saved! 🌿',
-            type: 'success',
-            isClickable: false,
-          })
-        }
-
-        // Auto-hide toast after 3 seconds
-        window.setTimeout(() => {
-          setRouteSaveToast({ show: false, message: '', type: 'success', isClickable: false })
-        }, 3000)
-      } catch (error) {
-        console.error('Error saving route:', error)
-        setRouteSaveToast({
-          show: true,
-          message: "Couldn't save route",
-          type: 'error',
-          isClickable: false,
-        })
-
-        window.setTimeout(() => {
-          setRouteSaveToast({ show: false, message: '', type: 'success', isClickable: false })
-        }, 3000)
+      if (error) {
+        console.error('Supabase insert error:', error)
+        setTripSaveState({ status: 'error', message: 'Could not save trip. Try again.' })
+        showToast("Couldn't save route", 'error')
+      } else {
+        setTripSaveState({ status: 'success', message: 'Trip saved to your history! 🌿' })
+        showToast('Route saved! 🌿', 'success')
       }
-    } else {
-      // User not logged in - show clickable toast
-      setRouteSaveToast({
-        show: true,
-        message: 'Log in to save your routes →',
-        type: 'info',
-        isClickable: true,
-      })
+    } catch (err) {
+      console.error('Unexpected error saving trip:', err)
+      setTripSaveState({ status: 'error', message: 'Could not save trip. Try again.' })
+      showToast("Couldn't save route", 'error')
     }
   }
 
