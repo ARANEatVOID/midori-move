@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
 import { useAuth } from '../hooks/useAuth.jsx'
 import { getBestLocation } from '../services/locationService'
-import { RotateCcw, Trash2 } from 'lucide-react'
+import { Trash2, Camera, UploadCloud } from 'lucide-react'
 
 const pageTransition = {
   initial: { opacity: 0, y: 18 },
@@ -40,6 +40,8 @@ function Profile() {
   const [locationLoading, setLocationLoading] = useState(true)
   const [locationError, setLocationError] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState({ tripId: null, show: false })
+  const [profileUploading, setProfileUploading] = useState(false)
+  const [profileUploadError, setProfileUploadError] = useState('')
 
   // Fetch saved routes from Supabase
   useEffect(() => {
@@ -178,6 +180,75 @@ function Profile() {
     }
   }
 
+  const uploadProfileImage = async (file) => {
+    const { data } = await supabase.auth.getUser()
+    const user = data.user
+
+    console.log("USER BEFORE UPLOAD:", user)
+
+    if (!user) {
+      console.error("User not authenticated")
+      return
+    }
+
+    const filePath = `${user.id}/${Date.now()}-${file.name}`
+
+    const { error } = await supabase.storage
+      .from("avatars")
+      .upload(filePath, file)
+
+    if (error) {
+      console.error("Upload failed:", error)
+      return
+    }
+
+    const { data: urlData } = supabase.storage
+      .from("avatars")
+      .getPublicUrl(filePath)
+
+    return urlData.publicUrl
+  }
+
+  const handleProfileImageUpload = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setProfileUploadError('Please upload a JPEG, PNG, or WEBP image')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setProfileUploadError('Profile image must be 5MB or less')
+      return
+    }
+
+    setProfileUploading(true)
+    setProfileUploadError('')
+
+    try {
+      const publicUrl = await uploadProfileImage(file)
+
+      if (publicUrl) {
+        // Update profile in database
+        const { error } = await supabase
+          .from('profiles')
+          .update({ profile_picture_url: publicUrl })
+          .eq('id', user.id)
+
+        if (error) throw error
+
+        // Update local user state by refetching
+        window.location.reload() // Simple way to refresh and get updated profile
+      }
+    } catch (error) {
+      console.error('Profile image upload failed:', error)
+      setProfileUploadError('Failed to upload profile image. Please try again.')
+    } finally {
+      setProfileUploading(false)
+    }
+  }
+
   const formatDate = (dateString) => {
     if (!dateString) return 'Saved trip'
     const date = new Date(dateString)
@@ -207,7 +278,7 @@ function Profile() {
             backdropFilter: 'blur(18px)',
           }}
         >
-          <div className="mx-auto mb-6 flex h-[120px] w-[120px] items-center justify-center overflow-hidden rounded-full bg-emerald-500">
+          <div className="mx-auto mb-6 flex h-[120px] w-[120px] items-center justify-center overflow-hidden rounded-full bg-emerald-500 relative group">
             {user?.profile_picture_url ? (
               <img
                 src={user.profile_picture_url}
@@ -217,6 +288,37 @@ function Profile() {
             ) : (
               <span className="text-5xl font-serif text-white">{initials}</span>
             )}
+            
+            {/* Upload overlay */}
+            <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <label htmlFor="profile-image-upload" className="cursor-pointer">
+                <Camera size={24} className="text-white" />
+              </label>
+            </div>
+            
+            <input
+              id="profile-image-upload"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleProfileImageUpload}
+              className="hidden"
+              disabled={profileUploading}
+            />
+          </div>
+          
+          {profileUploading && (
+            <p className="text-sm text-emerald-400 mb-2">Uploading...</p>
+          )}
+          
+          {profileUploadError && (
+            <p className="text-sm text-red-400 mb-2">{profileUploadError}</p>
+          )}
+          
+          <div className="mb-4">
+            <label htmlFor="profile-image-upload" className="inline-flex items-center gap-2 cursor-pointer text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+              <UploadCloud size={16} />
+              {user?.profile_picture_url ? 'Change profile picture' : 'Add profile picture'}
+            </label>
           </div>
           <h1 className="text-3xl font-serif tracking-tight text-white">{user.name}</h1>
           <p className="mt-2 text-sm text-white/80">{user.email || 'No email provided'}</p>

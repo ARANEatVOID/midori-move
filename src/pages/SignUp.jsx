@@ -7,7 +7,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 import CountrySelect, { countries } from '../components/CountrySelect'
 import PasswordStrengthMeter from '../components/PasswordStrengthMeter'
-import ProfilePictureUpload from '../components/ProfilePictureUpload'
 import SuccessOverlay from '../components/SuccessOverlay'
 import { supabase } from '../services/supabaseClient'
 
@@ -47,9 +46,6 @@ function SignUp() {
   const [loading, setLoading] = useState(false)
   const [invalidShakeKey, setInvalidShakeKey] = useState(0)
   const [successOpen, setSuccessOpen] = useState(false)
-  const [profilePreview, setProfilePreview] = useState('')
-  const [profileFile, setProfileFile] = useState(null)
-  const [profileError, setProfileError] = useState('')
   const [submittedName, setSubmittedName] = useState('')
   const [submissionError, setSubmissionError] = useState('')
 
@@ -87,32 +83,7 @@ function SignUp() {
 
   const onInvalid = () => setInvalidShakeKey((currentKey) => currentKey + 1)
 
-  const handleProfileChange = (event) => {
-    const file = event.target.files?.[0]
-
-    if (!file) return
-
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setProfileError('Please upload a JPEG, PNG, or WEBP image')
-      return
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setProfileError('Profile image must be 5MB or less')
-      return
-    }
-
-    setProfileError('')
-    setProfileFile(file)
-    setProfilePreview(URL.createObjectURL(file))
-  }
-
   const onSubmit = async (data) => {
-    if (profileError) {
-      onInvalid()
-      return
-    }
-
     setLoading(true)
     setSubmissionError('')
 
@@ -145,43 +116,12 @@ function SignUp() {
         return
       }
 
-      let publicUrl = null
-
-      // Upload profile picture if provided (after user is authenticated)
-      if (profileFile) {
-        try {
-          // Ensure user is authenticated before upload
-          const { data: userData } = await supabase.auth.getUser()
-          console.log("User before upload:", userData.user)
-
-          if (!userData.user) {
-            console.warn("User not authenticated, skipping image upload")
-            throw new Error("User not authenticated")
-          }
-
-          const timestamp = Date.now()
-          const path = `${userId}/${timestamp}-${profileFile.name}`
-
-          // Upload to Supabase storage
-          const { error: uploadError } = await supabase.storage.from('avatars').upload(path, profileFile)
-
-          if (uploadError) throw uploadError
-
-          // Get public URL
-          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
-          publicUrl = urlData.publicUrl
-        } catch (error) {
-          console.warn("Image upload failed, continuing signup", error)
-          // Don't fail signup due to image upload
-        }
-      }
-
-      // Insert profile into profiles table
+      // Insert profile into profiles table (without image upload)
       const { error: profileInsertError } = await supabase.from('profiles').insert({
         id: userId,
         name: data.fullName,
         country: data.country?.value ?? 'DEFAULT',
-        profile_picture_url: publicUrl,
+        profile_picture_url: null, // No image during signup
       })
 
       if (profileInsertError) {
@@ -255,8 +195,6 @@ function SignUp() {
                   {submissionError}
                 </div>
               ) : null}
-
-              <ProfilePictureUpload preview={profilePreview} error={profileError} onChange={handleProfileChange} />
 
               <div>
                 <label className="mb-2 block text-sm font-semibold">Full Name</label>

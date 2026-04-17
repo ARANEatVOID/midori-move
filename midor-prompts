@@ -2173,3 +2173,6 @@ Apply the same Framer Motion page transition as all other pages.
 Mobile responsive — stat grid goes 1 column on small screens.
 
 Once done, log in and navigate to /profile — you should see your name, profile picture, stats, and badges. Come back and we'll do Step 8 (trip history)! 🌿
+
+
+Error updating policy: Failed to run sql query: ERROR: 42601: syntax error at or near "true" LINE 1: BEGIN; ALTER POLICY "Allow public read 1oj01fe_0" ON storage.objects USING (bucket_id = 'avatars' true); COMMIT; ^ 
