@@ -119,12 +119,11 @@ function SignUp() {
       }
 
       if (!user) {
-        setSubmissionError('Failed to establish user session after signup. Please try again.')
-        setLoading(false)
-        return
+        throw new Error('User session not established after signup')
       }
 
-      console.log('Authenticated user:', user)
+      console.log('USER BEFORE INSERT:', user)
+      console.log('USER ID:', user?.id)
 
       const userId = user.id
 
