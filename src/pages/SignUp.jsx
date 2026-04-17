@@ -48,7 +48,6 @@ function SignUp() {
   const [invalidShakeKey, setInvalidShakeKey] = useState(0)
   const [successOpen, setSuccessOpen] = useState(false)
   const [profilePreview, setProfilePreview] = useState('')
-  const [profilePictureBase64, setProfilePictureBase64] = useState('')
   const [profileFile, setProfileFile] = useState(null)
   const [profileError, setProfileError] = useState('')
   const [submittedName, setSubmittedName] = useState('')
@@ -88,22 +87,6 @@ function SignUp() {
 
   const onInvalid = () => setInvalidShakeKey((currentKey) => currentKey + 1)
 
-  const fileToBase64 = (file) =>
-    new Promise((resolve, reject) => {
-      try {
-        const reader = new FileReader()
-        reader.onload = () => {
-          const dataUrl = String(reader.result || '')
-          const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl
-          resolve(base64)
-        }
-        reader.onerror = () => reject(new Error('Failed to read file'))
-        reader.readAsDataURL(file)
-      } catch (e) {
-        reject(e)
-      }
-    })
-
   const handleProfileChange = (event) => {
     const file = event.target.files?.[0]
 
@@ -122,9 +105,6 @@ function SignUp() {
     setProfileError('')
     setProfileFile(file)
     setProfilePreview(URL.createObjectURL(file))
-    fileToBase64(file)
-      .then((dataUrl) => setProfilePictureBase64(dataUrl))
-      .catch(() => setProfilePictureBase64(''))
   }
 
   const onSubmit = async (data) => {
@@ -137,35 +117,7 @@ function SignUp() {
     setSubmissionError('')
 
     try {
-      let publicUrl = null
-
-      // Upload profile picture if provided
-      if (profileFile) {
-        try {
-          const timestamp = Date.now()
-          const mimeToExt = {
-            'image/jpeg': 'jpg',
-            'image/png': 'png',
-            'image/webp': 'webp',
-          }
-          const ext = mimeToExt[profileFile.type] || 'jpg'
-          const path = `${timestamp}.${ext}`
-
-          // Upload to Supabase storage
-          const { error: uploadError } = await supabase.storage.from('avatars').upload(path, profileFile)
-
-          if (uploadError) throw uploadError
-
-          // Get public URL
-          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
-          publicUrl = urlData.publicUrl
-        } catch (error) {
-          console.error('Error uploading profile picture:', error)
-          throw new Error('Failed to upload profile picture')
-        }
-      }
-
-      // Create auth user
+      // Create auth user first
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
@@ -191,6 +143,37 @@ function SignUp() {
         setSubmissionError('Failed to create account. Please try again.')
         setLoading(false)
         return
+      }
+
+      let publicUrl = null
+
+      // Upload profile picture if provided (after user is authenticated)
+      if (profileFile) {
+        try {
+          // Ensure user is authenticated before upload
+          const { data: userData } = await supabase.auth.getUser()
+          console.log("User before upload:", userData.user)
+
+          if (!userData.user) {
+            console.warn("User not authenticated, skipping image upload")
+            throw new Error("User not authenticated")
+          }
+
+          const timestamp = Date.now()
+          const path = `${userId}/${timestamp}-${profileFile.name}`
+
+          // Upload to Supabase storage
+          const { error: uploadError } = await supabase.storage.from('avatars').upload(path, profileFile)
+
+          if (uploadError) throw uploadError
+
+          // Get public URL
+          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
+          publicUrl = urlData.publicUrl
+        } catch (error) {
+          console.warn("Image upload failed, continuing signup", error)
+          // Don't fail signup due to image upload
+        }
       }
 
       // Insert profile into profiles table
