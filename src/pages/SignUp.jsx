@@ -89,7 +89,7 @@ function SignUp() {
 
     try {
       // Create auth user first
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
@@ -109,19 +109,30 @@ function SignUp() {
         return
       }
 
-      const userId = authData.user?.id
-      if (!userId) {
-        setSubmissionError('Failed to create account. Please try again.')
+      let user = null
+      for (let i = 0; i < 5; i++) {
+        const res = await supabase.auth.getUser()
+        user = res.data.user
+
+        if (user) break
+        await new Promise((resolve) => setTimeout(resolve, 300))
+      }
+
+      if (!user) {
+        setSubmissionError('Failed to establish user session after signup. Please try again.')
         setLoading(false)
         return
       }
 
-      // Insert profile into profiles table (without image upload)
+      console.log('Authenticated user:', user)
+
+      const userId = user.id
+
       const { error: profileInsertError } = await supabase.from('profiles').insert({
         id: userId,
         name: data.fullName,
         country: data.country?.value ?? 'DEFAULT',
-        profile_picture_url: null, // No image during signup
+        profile_picture_url: null,
       })
 
       if (profileInsertError) {
