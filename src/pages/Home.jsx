@@ -2,6 +2,7 @@ import { motion, useInView } from 'framer-motion'
 import { ArrowRight, Bike, Bus, Globe2, Leaf, MapPinned, Send, Trees } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth.jsx'
 
 const features = [
   { icon: MapPinned, title: 'Real-Time Navigation', copy: 'Track your location, pinpoint your destination' },
@@ -50,6 +51,9 @@ function StatCounter({ value, suffix, label }) {
 }
 
 function Home() {
+  const { session } = useAuth()
+  const isLoggedIn = !!session?.user
+
   return (
     <div>
       <section className="container-shell flex min-h-[calc(100vh-88px)] items-center py-12">
@@ -213,8 +217,7 @@ function Home() {
               {[
                 ['Home', '/'],
                 ['About', '/about'],
-                ['Sign Up', '/signup'],
-                ['Log In', '/login'],
+                ...(isLoggedIn ? [['Profile', '/profile']] : [['Sign Up', '/signup'], ['Log In', '/login']]),
               ].map(([label, href]) => (
                 <Link key={label} to={href} className="link-underline">
                   {label}

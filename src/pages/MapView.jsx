@@ -589,7 +589,7 @@ function MapView() {
   return (
     <section className="px-4 pb-4 pt-2 sm:px-6 lg:px-8">
       <div
-        className="flex h-[calc(100vh-110px)] min-h-0 flex-col overflow-hidden rounded-[2rem] border lg:flex-row"
+        className="flex min-h-[calc(100vh-110px)] min-h-0 flex-col overflow-visible rounded-[2rem] border lg:flex-row"
         style={{
           borderColor: 'color-mix(in srgb, var(--color-border) 60%, transparent)',
           background: 'color-mix(in srgb, var(--color-bg-card) 74%, transparent)',
@@ -705,9 +705,7 @@ function MapView() {
         </div>
 
         <aside
-          className={`order-2 w-full shrink-0 overflow-y-auto border-t p-5 touch-auto ${
-            hasRouteResults ? 'max-h-[50vh]' : 'max-h-[45vh]'
-          } lg:order-1 lg:h-full lg:max-h-none lg:w-[400px] lg:border-r lg:border-t-0 lg:p-6`}
+          className="order-2 w-full shrink-0 overflow-y-auto border-t p-5 touch-auto max-h-none lg:order-1 lg:h-full lg:max-h-none lg:w-[400px] lg:border-r lg:border-t-0 lg:p-6"
           style={{
             borderColor: 'color-mix(in srgb, var(--color-border) 55%, transparent)',
             WebkitOverflowScrolling: 'touch',
