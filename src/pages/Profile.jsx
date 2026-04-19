@@ -32,7 +32,7 @@ function getModeEmoji(mode) {
 
 function Profile() {
   const navigate = useNavigate()
-  const { user, session, loading: authLoading, fetchTrips, tripHistory } = useAuth()
+  const { user, session, loading: authLoading, fetchTrips, tripHistory, refreshUser } = useAuth()
   
   const savedRoutes = tripHistory || []
   const [routesLoading, setRoutesLoading] = useState(true)
@@ -94,19 +94,33 @@ function Profile() {
   const profilePictureUrl = user?.profile_picture_url || session?.user?.user_metadata?.avatar_url || session?.user?.user_metadata?.picture
 
   const getUserDisplayName = useMemo(() => {
-    // Fallback chain: profile.name → auth metadata → email prefix → default
-    if (user?.name) return user.name
-    if (profileMetadataName) return profileMetadataName
-    if (session?.user?.email) return session.user.email.split('@')[0]
+    try {
+      if (user?.name) return user.name
+      if (profileMetadataName) return profileMetadataName
+      const email = session?.user?.email
+      if (typeof email === 'string' && email.includes('@')) {
+        return email.split('@')[0]
+      }
+    } catch (error) {
+      console.error('Error resolving display name:', error)
+    }
     return 'User'
   }, [user?.name, profileMetadataName, session?.user?.email])
 
   const initials = useMemo(() => {
-    const nameSource = user?.name || profileMetadataName || session?.user?.email?.split('@')[0]
-    if (!nameSource) return 'MM'
-    const parts = nameSource.trim().split(/\s+/)
-    if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
-    return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase()
+    try {
+      let nameSource = user?.name || profileMetadataName || session?.user?.email
+      if (!nameSource || typeof nameSource !== 'string') return 'MM'
+      if (nameSource.includes('@')) {
+        nameSource = nameSource.split('@')[0]
+      }
+      const parts = nameSource.trim().split(/\s+/)
+      if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
+      return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase()
+    } catch (error) {
+      console.error('Error computing initials:', error)
+      return 'MM'
+    }
   }, [user?.name, profileMetadataName, session?.user?.email])
 
   // Calculate aggregate stats from trips
@@ -241,8 +255,8 @@ function Profile() {
 
         if (error) throw error
 
-        // Update local user state by refetching
-        window.location.reload() // Simple way to refresh and get updated profile
+        // Refresh the auth profile without reloading the page
+        await refreshUser()
       }
     } catch (error) {
       console.error('Profile image upload failed:', error)
