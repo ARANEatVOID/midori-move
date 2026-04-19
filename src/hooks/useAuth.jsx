@@ -100,11 +100,12 @@ export const AuthProvider = ({ children }) => {
 
     const { data, error } = await supabase.from("trips").insert(row).select().maybeSingle()
     if (error) throw error
-    if (data) {
-      setTripHistory((prev) => [data, ...prev])
-    }
+
+    // Re-fetch trips after insert for consistency
+    await fetchTrips()
+
     return data
-  }, [])
+  }, [fetchTrips])
 
   /**
    * Fetch all trips for the logged-in user, newest first.
