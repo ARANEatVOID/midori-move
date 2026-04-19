@@ -74,6 +74,29 @@ export const AuthProvider = ({ children }) => {
   // ── Trip helpers ────────────────────────────────────────────────────────────
 
   /**
+   * Fetch all trips for the logged-in user, newest first.
+   */
+  const fetchTrips = useCallback(async () => {
+    const { data: sessionData } = await supabase.auth.getSession()
+    const authUid = sessionData?.session?.user?.id
+    if (!authUid) return []
+
+    const { data, error } = await supabase
+      .from("trips")
+      .select("*")
+      .eq("user_id", authUid)
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("Error fetching trips:", error)
+      return []
+    }
+    const trips = data ?? []
+    setTripHistory(trips)
+    return trips
+  }, [])
+
+  /**
    * Insert a trip row.  user_id is always taken from the live session so it
    * matches auth.uid() and satisfies the RLS policy:
    *   CREATE POLICY "Users can insert own trips"
@@ -106,29 +129,6 @@ export const AuthProvider = ({ children }) => {
 
     return data
   }, [fetchTrips])
-
-  /**
-   * Fetch all trips for the logged-in user, newest first.
-   */
-  const fetchTrips = useCallback(async () => {
-    const { data: sessionData } = await supabase.auth.getSession()
-    const authUid = sessionData?.session?.user?.id
-    if (!authUid) return []
-
-    const { data, error } = await supabase
-      .from("trips")
-      .select("*")
-      .eq("user_id", authUid)
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("Error fetching trips:", error)
-      return []
-    }
-    const trips = data ?? []
-    setTripHistory(trips)
-    return trips
-  }, [])
 
   /**
    * Derive favorite transport mode from an array of trips.
