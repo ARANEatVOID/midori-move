@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react"
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react"
 import { supabase } from "../services/supabaseClient"
 
 const AuthContext = createContext(null)
@@ -7,6 +7,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [tripHistory, setTripHistory] = useState([])
 
   // Fetch profile from "profiles" table by auth user id
   const fetchProfile = useCallback(async (authUserId) => {
@@ -50,6 +51,7 @@ export const AuthProvider = ({ children }) => {
       } catch (error) {
         console.error("Error fetching initial session:", error)
         setUser(null)
+        setSession(null)
       } finally {
         setLoading(false)
       }
@@ -96,8 +98,11 @@ export const AuthProvider = ({ children }) => {
       // created_at defaults to now() in Supabase — no need to send it
     }
 
-    const { data, error } = await supabase.from("trips").insert(row).select().single()
+    const { data, error } = await supabase.from("trips").insert(row).select().maybeSingle()
     if (error) throw error
+    if (data) {
+      setTripHistory((prev) => [data, ...prev])
+    }
     return data
   }, [])
 
@@ -119,7 +124,9 @@ export const AuthProvider = ({ children }) => {
       console.error("Error fetching trips:", error)
       return []
     }
-    return data ?? []
+    const trips = data ?? []
+    setTripHistory(trips)
+    return trips
   }, [])
 
   /**
@@ -138,6 +145,30 @@ export const AuthProvider = ({ children }) => {
 
   // ────────────────────────────────────────────────────────────────────────────
 
+  const favoriteTransportMode = useMemo(() => {
+    if (!tripHistory.length) return null
+    const counts = tripHistory.reduce((acc, trip) => {
+      const mode = trip.transport_mode || 'unknown'
+      acc[mode] = (acc[mode] || 0) + 1
+      return acc
+    }, {})
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+  }, [tripHistory])
+
+  const displayName = useMemo(() => {
+    if (user?.name) return user.name
+    if (session?.user?.email) return session.user.email.split('@')[0]
+    return null
+  }, [user?.name, session?.user?.email])
+
+  const displayInitials = useMemo(() => {
+    const nameSource = user?.name || session?.user?.email?.split('@')[0]
+    if (!nameSource) return 'MM'
+    const parts = nameSource.trim().split(/\s+/)
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
+    return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase()
+  }, [user?.name, session?.user?.email])
+
   return (
     <AuthContext.Provider
       value={{
@@ -145,8 +176,11 @@ export const AuthProvider = ({ children }) => {
         session,
         loading,
         isLoggedIn: !!session?.user,
-        // expose auth uid directly for convenience
         authUid: session?.user?.id ?? null,
+        displayName,
+        displayInitials,
+        tripHistory,
+        favoriteTransportMode,
         refreshUser,
         insertTrip,
         fetchTrips,

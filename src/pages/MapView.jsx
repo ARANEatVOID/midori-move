@@ -137,7 +137,7 @@ function getLocationStatusMessage(source) {
 function MapView() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, session } = useAuth()
+  const { user, session, insertTrip } = useAuth()
   
   const [locationState, setLocationState] = useState({
     loading: false,
@@ -566,8 +566,7 @@ function MapView() {
     setTripSaveState({ status: 'success', message: 'Saving...' })
 
     try {
-      const { error } = await supabase.from('trips').insert({
-        user_id: session.user.id,
+      await insertTrip({
         from_location: (fromValue || origin?.name || 'Unknown').slice(0, 255),
         to_location: (toValue || destination?.name || 'Unknown').slice(0, 255),
         transport_mode: transportMode,
@@ -575,16 +574,10 @@ function MapView() {
         carbon_saved: Number(liveCo2Saved) || 0,
       })
 
-      if (error) {
-        console.error('Supabase insert error:', error)
-        setTripSaveState({ status: 'error', message: 'Could not save trip. Try again.' })
-        showToast("Couldn't save route", 'error')
-      } else {
-        setTripSaveState({ status: 'success', message: 'Trip saved to your history! 🌿' })
-        showToast('Route saved! 🌿', 'success')
-      }
+      setTripSaveState({ status: 'success', message: 'Trip saved to your history! 🌿' })
+      showToast('Route saved! 🌿', 'success')
     } catch (err) {
-      console.error('Unexpected error saving trip:', err)
+      console.error('Unable to save trip:', err)
       setTripSaveState({ status: 'error', message: 'Could not save trip. Try again.' })
       showToast("Couldn't save route", 'error')
     }

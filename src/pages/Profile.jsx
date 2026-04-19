@@ -32,9 +32,9 @@ function getModeEmoji(mode) {
 
 function Profile() {
   const navigate = useNavigate()
-  const { user, session, loading: authLoading } = useAuth()
+  const { user, session, loading: authLoading, fetchTrips, tripHistory } = useAuth()
   
-  const [savedRoutes, setSavedRoutes] = useState([])
+  const savedRoutes = tripHistory || []
   const [routesLoading, setRoutesLoading] = useState(true)
   const [currentLocation, setCurrentLocation] = useState(null)
   const [locationLoading, setLocationLoading] = useState(true)
@@ -55,18 +55,9 @@ function Profile() {
     const loadSavedRoutes = async () => {
       try {
         setRoutesLoading(true)
-        const { data, error } = await supabase
-          .from('trips')
-          .select('*')
-          .eq('user_id', session.user.id)
-          .order('created_at', { ascending: false })
-          .limit(20)
-
-        if (error) throw error
-        setSavedRoutes(data || [])
+        await fetchTrips()
       } catch (error) {
         console.error('Error loading trips:', error)
-        setSavedRoutes([])
       } finally {
         setRoutesLoading(false)
       }
@@ -99,19 +90,24 @@ function Profile() {
     return null
   }
 
+  const profileMetadataName = session?.user?.user_metadata?.full_name || session?.user?.user_metadata?.name
+  const profilePictureUrl = user?.profile_picture_url || session?.user?.user_metadata?.avatar_url || session?.user?.user_metadata?.picture
+
   const getUserDisplayName = useMemo(() => {
-    // Fallback chain: name → email prefix → default
+    // Fallback chain: profile.name → auth metadata → email prefix → default
     if (user?.name) return user.name
+    if (profileMetadataName) return profileMetadataName
     if (session?.user?.email) return session.user.email.split('@')[0]
     return 'User'
-  }, [user?.name, session?.user?.email])
+  }, [user?.name, profileMetadataName, session?.user?.email])
 
   const initials = useMemo(() => {
-    if (!user?.name) return 'MM'
-    const parts = user.name.trim().split(/\s+/)
+    const nameSource = user?.name || profileMetadataName || session?.user?.email?.split('@')[0]
+    if (!nameSource) return 'MM'
+    const parts = nameSource.trim().split(/\s+/)
     if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
     return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase()
-  }, [user?.name])
+  }, [user?.name, profileMetadataName, session?.user?.email])
 
   // Calculate aggregate stats from trips
   const aggregateStats = useMemo(() => {
@@ -174,13 +170,13 @@ function Profile() {
   const handleDeleteRoute = async (tripId) => {
     try {
       const { error } = await supabase
-        .from('trips')
+        .from('saved_routes')
         .delete()
         .eq('id', tripId)
 
       if (error) throw error
 
-      setSavedRoutes((prev) => prev.filter((route) => route.id !== tripId))
+      await fetchTrips()
       setDeleteConfirm({ tripId: null, show: false })
     } catch (error) {
       console.error('Error deleting route:', error)
@@ -286,10 +282,10 @@ function Profile() {
           }}
         >
           <div className="mx-auto mb-6 flex h-[120px] w-[120px] items-center justify-center overflow-hidden rounded-full bg-emerald-500 relative group">
-            {user?.profile_picture_url ? (
+            {profilePictureUrl ? (
               <img
-                src={user.profile_picture_url}
-                alt={user.name}
+                src={profilePictureUrl}
+                alt={getUserDisplayName}
                 className="h-full w-full rounded-full object-cover"
               />
             ) : (
@@ -324,7 +320,7 @@ function Profile() {
           <div className="mb-4">
             <label htmlFor="profile-image-upload" className="inline-flex items-center gap-2 cursor-pointer text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
               <UploadCloud size={16} />
-              {user?.profile_picture_url ? 'Change profile picture' : 'Add profile picture'}
+              {profilePictureUrl ? 'Change profile picture' : 'Add profile picture'}
             </label>
           </div>
           <h1 className="text-3xl font-serif tracking-tight text-white">{getUserDisplayName}</h1>
@@ -561,65 +557,66 @@ function Profile() {
                         <div className="flex-1 space-y-3">
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-2">
-                                <span className="text-2xl">{getModeEmoji(route.transport_mode)}</span>
-                                <div>
-                                  <p className="font-semibold text-emerald-700">
-                                    {route.transport_mode
-                                      ? route.transport_mode.charAt(0).toUpperCase() + route.transport_mode.slice(1)
-                                      : 'Trip'}
-                                  </p>
-                                  <p className="text-xs text-slate-500">{formatDate(route.created_at)}</p>
-                                </div>
+                              <span className="text-2xl">{getModeEmoji(route.transport_mode)}</span>
+                              <div>
+                                <p className="font-semibold text-emerald-700">
+                                  {route.transport_mode
+                                    ? route.transport_mode.charAt(0).toUpperCase() + route.transport_mode.slice(1)
+                                    : 'Trip'}
+                                </p>
+                                <p className="text-xs text-slate-500">{formatDate(route.created_at)}</p>
                               </div>
                             </div>
+                          </div>
 
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-slate-300">{truncateText(route.from_location, 30)}</span>
-                              <span className="text-slate-500">→</span>
-                              <span className="text-sm font-medium text-slate-300">{truncateText(route.to_location, 30)}</span>
-                            </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-slate-300">{truncateText(route.from_location, 30)}</span>
+                            <span className="text-slate-500">→</span>
+                            <span className="text-sm font-medium text-slate-300">{truncateText(route.to_location, 30)}</span>
+                          </div>
 
-                            <div className="flex flex-wrap gap-3 text-sm text-slate-600">
-                              <span>📍 {Number(route.distance_km || 0).toFixed(1)} km</span>
-                              <span>💨 {Number(route.carbon_saved || 0).toFixed(2)} kg CO₂</span>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteConfirm({ tripId: route.id, show: true })}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10 text-red-500 transition hover:bg-red-500/20"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-
-                        {/* Delete Confirmation Popover */}
-                        <AnimatePresence>
-                          {deleteConfirm.show && deleteConfirm.tripId === route.id && (
-                            <motion.div
-                              initial={{ opacity: 0, scale: 0.9 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              exit={{ opacity: 0, scale: 0.9 }}
-                              className="absolute right-4 top-full z-20 mt-2 rounded-lg border border-red-200 bg-red-50 p-3 shadow-lg"
+                          <div className="flex flex-wrap gap-3 text-sm text-slate-600 items-center">
+                            <span>📍 {Number(route.distance_km || 0).toFixed(1)} km</span>
+                            <span>💨 {Number(route.carbon_saved || 0).toFixed(2)} kg CO₂</span>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirm({ tripId: route.id, show: true })}
+                              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10 text-red-500 transition hover:bg-red-500/20"
                             >
-                              <p className="mb-3 text-sm font-medium text-red-900">Delete this trip?</p>
-                              <div className="flex gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteRoute(route.id)}
-                                  className="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-red-600"
-                                >
-                                  Delete
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setDeleteConfirm({ tripId: null, show: false })}
-                                  className="rounded-md border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+
+                          {/* Delete Confirmation Popover */}
+                          <AnimatePresence>
+                            {deleteConfirm.show && deleteConfirm.tripId === route.id && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
+                                className="absolute right-4 top-full z-20 mt-2 rounded-lg border border-red-200 bg-red-50 p-3 shadow-lg"
+                              >
+                                <p className="mb-3 text-sm font-medium text-red-900">Delete this trip?</p>
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteRoute(route.id)}
+                                    className="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-red-600"
+                                  >
+                                    Delete
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteConfirm({ tripId: null, show: false })}
+                                    className="rounded-md border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
                       </div>
                     </motion.div>
                   ))}

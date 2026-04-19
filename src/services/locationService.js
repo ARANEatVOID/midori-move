@@ -155,12 +155,7 @@ async function getBestLocation() {
     console.debug('Location source: gps')
     return gpsLocation
   } catch (error) {
-    if (error?.code === 1) {
-      // User denied permission - don't silently suppress
-      console.error('Geolocation permission denied:', error.message)
-      throw new Error(buildLocationErrorMessage(error))
-    }
-    console.debug('GPS location unavailable, trying IP fallback...')
+    console.debug('GPS location unavailable, trying IP fallback...', error?.message)
   }
 
   const ipLocation = await getIpLocation()

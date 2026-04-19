@@ -11,20 +11,16 @@ const navItems = [
   { label: 'About Us', to: '/about' },
 ]
 
-function getUserInitials(name) {
-  if (!name) return 'MM'
-  const parts = name.trim().split(/\s+/)
+function getUserInitials(name, email) {
+  const nameSource = name || email?.split('@')[0]
+  if (!nameSource) return 'MM'
+  const parts = nameSource.trim().split(/\s+/)
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
   return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase()
 }
 
-function getUserDisplay(user, session) {
-  if (user?.name) return user.name
-  if (session?.user?.email) {
-    const emailPrefix = session.user.email.split('@')[0]
-    return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1)
-  }
-  return 'User'
+function getUserDisplay(displayName) {
+  return displayName || 'User'
 }
 
 function Navbar() {
@@ -32,7 +28,7 @@ function Navbar() {
   const { scrollY } = useScroll()
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, session, loading: authLoading, isLoggedIn } = useAuth()
+  const { user, session, loading: authLoading, isLoggedIn, displayName, displayInitials } = useAuth()
   const navOpacity = useTransform(scrollY, [0, 80], [0.45, 0.88])
   const navBackground = useTransform(
     navOpacity,
@@ -44,25 +40,22 @@ function Navbar() {
     if (!isLoggedIn) return null
 
     return (
-      <button
-        type="button"
-        onClick={() => {
-          setMobileOpen(false)
-          navigate('/profile')
-        }}
+      <Link
+        to="/profile"
         className={`inline-flex ${sizeClasses} items-center justify-center rounded-full bg-[#34c96c] font-bold text-white transition hover:shadow-lg hover:shadow-[#34c96c]/30 ${textClasses}`}
         aria-label="Profile"
+        onClick={() => setMobileOpen(false)}
       >
         {user?.profile_picture_url ? (
           <img
             src={user.profile_picture_url}
-            alt={user.name || 'Profile'}
+            alt={displayName || 'Profile'}
             className="h-full w-full rounded-full object-cover"
           />
         ) : (
-          <span>{getUserInitials(user?.name)}</span>
+          <span>{getUserInitials(user?.name, session?.user?.email)}</span>
         )}
-      </button>
+      </Link>
     )
   }
 
@@ -120,13 +113,12 @@ function Navbar() {
             ) : isLoggedIn ? (
               /* Logged In State */
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => navigate('/profile')}
+                <Link
+                  to="/profile"
                   className="text-sm font-medium text-white/80 transition hover:text-white"
                 >
-                  {getUserDisplay(user, session)}
-                </button>
+                  {getUserDisplay(displayName)}
+                </Link>
                 {renderAvatar()}
               </div>
             ) : (
@@ -203,7 +195,7 @@ function Navbar() {
                   }}
                 >
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">{getUserDisplay(user, session)}</p>
+                    <p className="text-sm font-semibold text-slate-900">{getUserDisplay(displayName)}</p>
                     <p className="text-xs text-slate-500">{session?.user?.email || 'Your account'}</p>
                   </div>
                   {renderAvatar('h-12 w-12', 'text-base')}
