@@ -5,6 +5,7 @@ import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { motion } from 'framer-motion'
 import { Bus, Crosshair, Footprints, LoaderCircle, Search, Bike, Train } from 'lucide-react'
+import { App } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -101,11 +102,28 @@ function MapResizer() {
   const map = useMap()
 
   useEffect(() => {
-    // Simple WebView fix: invalidate size once after mount
-    if (Capacitor.isNativePlatform()) {
-      setTimeout(() => {
-        map.invalidateSize()
-      }, 100)
+    if (!Capacitor.isNativePlatform()) return
+
+    const initialResizeTimeout = window.setTimeout(() => {
+      map.invalidateSize()
+    }, 800)
+
+    const fallbackResizeTimeout = window.setTimeout(() => {
+      map.invalidateSize()
+    }, 1500)
+
+    const appStateChangeListenerPromise = App.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) {
+        window.setTimeout(() => {
+          map.invalidateSize()
+        }, 300)
+      }
+    })
+
+    return () => {
+      window.clearTimeout(initialResizeTimeout)
+      window.clearTimeout(fallbackResizeTimeout)
+      appStateChangeListenerPromise.then((listener) => listener.remove())
     }
   }, [map])
 
@@ -605,6 +623,7 @@ function MapView() {
               zoom={5} 
               scrollWheelZoom 
               className="h-full w-full"
+              style={{ height: '100%' }}
             >
               <MapResizer />
               <TileLayer
