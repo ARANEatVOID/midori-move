@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, useScroll, useTransform } from 'framer-motion'
 import { Leaf, Menu, X } from 'lucide-react'
 import { useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.jsx'
 import ThemeToggle from './ThemeToggle'
 
@@ -26,7 +26,6 @@ function getUserDisplay(displayName) {
 function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const { scrollY } = useScroll()
-  const location = useLocation()
   const navigate = useNavigate()
   const { user, session, loading: authLoading, isLoggedIn, displayName } = useAuth()
   const navOpacity = useTransform(scrollY, [0, 80], [0.45, 0.88])
