@@ -1,18 +1,14 @@
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
+import { supabase } from './supabaseClient.js'
 
 async function queryOverpass(query) {
-  const response = await fetch(OVERPASS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
+  const { data, error } = await supabase.functions.invoke('overpass-proxy', {
     body: query,
   })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Overpass request failed: ${response.status} ${response.statusText} - ${errorText}`)
+  if (error) {
+    throw new Error(`Overpass proxy request failed: ${error.message}`)
   }
 
-  const data = await response.json()
   return data.elements || []
 }
 

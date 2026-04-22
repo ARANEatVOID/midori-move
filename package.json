@@ -14,6 +14,7 @@
     "@capacitor/cli": "^5.7.8",
     "@capacitor/core": "^5.7.8",
     "@capacitor/geolocation": "^5.0.8",
+    "@capacitor/preferences": "^5.0.8",
     "@hookform/resolvers": "^5.2.2",
     "@supabase/supabase-js": "^2.103.3",
     "autoprefixer": "^10.5.0",
@@ -39,5 +40,18 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
     "vite": "^5.1.0"
-  }
+  },
+  "description": "This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.",
+  "main": "postcss.config.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ARANEatVOID/midori-move.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ARANEatVOID/midori-move/issues"
+  },
+  "homepage": "https://github.com/ARANEatVOID/midori-move#readme"
 }

@@ -97,16 +97,17 @@ function FitBounds({ origin, destination }) {
   return null
 }
 
-function ResizeMapOnLayoutChange({ layoutKey }) {
+function MapResizer() {
   const map = useMap()
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      map.invalidateSize()
-    }, 150)
-
-    return () => window.clearTimeout(timeoutId)
-  }, [layoutKey, map])
+    // Simple WebView fix: invalidate size once after mount
+    if (Capacitor.isNativePlatform()) {
+      setTimeout(() => {
+        map.invalidateSize()
+      }, 100)
+    }
+  }, [map])
 
   return null
 }
@@ -589,7 +590,7 @@ function MapView() {
   return (
     <section className="px-4 pb-4 pt-2 sm:px-6 lg:px-8">
       <div
-        className="flex min-h-[calc(100vh-110px)] min-h-0 flex-col overflow-visible rounded-[2rem] border lg:flex-row"
+        className="flex min-h-[calc(100vh-110px)] flex-col overflow-visible rounded-[2rem] border lg:flex-row"
         style={{
           borderColor: 'color-mix(in srgb, var(--color-border) 60%, transparent)',
           background: 'color-mix(in srgb, var(--color-bg-card) 74%, transparent)',
@@ -598,12 +599,18 @@ function MapView() {
         }}
       >
         <div className={`order-1 relative flex min-h-0 flex-1 ${hasRouteResults ? 'touch-auto' : ''} lg:order-2`}>
-          <div className="h-full min-h-0 w-full">
-            <MapContainer center={defaultCenter} zoom={5} scrollWheelZoom className="h-full w-full">
-              <ResizeMapOnLayoutChange layoutKey={mapLayoutKey} />
+          <div className="h-full w-full" style={{ minHeight: '400px' }}>
+            <MapContainer 
+              center={defaultCenter} 
+              zoom={5} 
+              scrollWheelZoom 
+              className="h-full w-full"
+            >
+              <MapResizer />
               <TileLayer
                 attribution="© OpenStreetMap contributors"
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                crossOrigin=""
               />
               {origin ? (
                 <Marker position={[origin.lat, origin.lng]}>
