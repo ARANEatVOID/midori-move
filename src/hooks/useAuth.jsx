@@ -5,6 +5,7 @@ const AuthContext = createContext(null)
 
 export const AuthProvider = ({ children }) => {
   const instanceId = useRef(Math.random().toString(36).slice(2))
+  const sessionRef = useRef(null)
   const [user, setUser] = useState(null)
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -65,16 +66,14 @@ export const AuthProvider = ({ children }) => {
 
       if (!isMounted) return
 
-      setLoading(true)
+      sessionRef.current = newSession
       setSession(newSession)
       if (newSession?.user?.id) {
         setUser({ id: newSession.user.id })
         await fetchProfile(newSession.user.id)
-      } else {
+      } else if (event === "SIGNED_OUT") {
         setUser(null)
         setTripHistory([])
-        setLoading(false)
-        return
       }
 
       setLoading(false)
@@ -92,14 +91,17 @@ export const AuthProvider = ({ children }) => {
 
         if (!isMounted) return
 
-        if (data.session?.user?.id) {
+        if (!sessionRef.current && data.session?.user?.id) {
+          sessionRef.current = data.session
           setSession(data.session)
           await fetchProfile(data.session.user.id)
-          setLoading(false)
         }
+
+        setLoading(false)
       })
       .catch((error) => {
         console.error("Error fetching initial session:", error)
+        setLoading(false)
       })
 
     return () => {
