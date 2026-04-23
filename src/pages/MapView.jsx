@@ -617,7 +617,7 @@ function MapView() {
         }}
       >
         <div className={`order-1 relative flex min-h-0 flex-1 ${hasRouteResults ? 'touch-auto' : ''} lg:order-2`}>
-          <div className="h-full w-full" style={{ minHeight: '400px' }}>
+          <div className="h-full w-full" style={{ minHeight: '400px', height: '100vh', width: '100%' }}>
             <MapContainer 
               center={defaultCenter} 
               zoom={5} 
