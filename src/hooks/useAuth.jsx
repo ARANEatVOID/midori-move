@@ -13,6 +13,7 @@ export const AuthProvider = ({ children }) => {
   const fetchProfile = useCallback(async (authUserId) => {
     if (!authUserId) {
       setUser(null)
+      setTripHistory([])
       setLoading(false)
       return
     }
@@ -43,6 +44,10 @@ export const AuthProvider = ({ children }) => {
     const { data } = await supabase.auth.getSession()
     if (data?.session?.user?.id) {
       await fetchProfile(data.session.user.id)
+    } else {
+      setUser(null)
+      setTripHistory([])
+      setLoading(false)
     }
   }, [fetchProfile])
 
@@ -58,6 +63,7 @@ export const AuthProvider = ({ children }) => {
         console.error("Error fetching initial session:", error)
         setUser(null)
         setSession(null)
+        setTripHistory([])
       } finally {
         setLoading(false)
       }
@@ -68,7 +74,11 @@ export const AuthProvider = ({ children }) => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      setLoading(true)
       setSession(newSession)
+      if (!newSession?.user?.id) {
+        setTripHistory([])
+      }
       await fetchProfile(newSession?.user?.id)
     })
 
@@ -83,24 +93,34 @@ export const AuthProvider = ({ children }) => {
    * Fetch all trips for the logged-in user, newest first.
    */
   const fetchTrips = useCallback(async () => {
-    const { data: sessionData } = await supabase.auth.getSession()
-    const authUid = sessionData?.session?.user?.id
-    if (!authUid) return []
-
-    const { data, error } = await supabase
-      .from("trips")
-      .select("*")
-      .eq("user_id", authUid)
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("Error fetching trips:", error)
+    const authUid = session?.user?.id
+    if (!authUid) {
+      setTripHistory([])
       return []
     }
-    const trips = data ?? []
-    setTripHistory(trips)
-    return trips
-  }, [])
+
+    try {
+      const { data, error } = await supabase
+        .from("trips")
+        .select("*")
+        .eq("user_id", authUid)
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        console.error("Error fetching trips:", error)
+        setTripHistory([])
+        return []
+      }
+
+      const trips = data ?? []
+      setTripHistory(trips)
+      return trips
+    } catch (error) {
+      console.error("Error fetching trips:", error)
+      setTripHistory([])
+      return []
+    }
+  }, [session?.user?.id])
 
   /**
    * Insert a trip row.  user_id is always taken from the live session so it
