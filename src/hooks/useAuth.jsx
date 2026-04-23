@@ -1,18 +1,25 @@
-import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react"
+import { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from "react"
 import { supabase } from "../services/supabaseClient"
 
 const AuthContext = createContext(null)
 
 export const AuthProvider = ({ children }) => {
+  const instanceId = useRef(Math.random().toString(36).slice(2))
   const [user, setUser] = useState(null)
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [tripHistory, setTripHistory] = useState([])
 
+  useEffect(() => {
+    console.log("AUTH PROVIDER ID:", instanceId.current)
+  }, [])
+
   // Fetch profile from "profiles" table by auth user id
   const fetchProfile = useCallback(async (authUserId) => {
+    console.log("FETCH PROFILE FOR:", authUserId)
+
     if (!authUserId) {
-      console.warn("fetchProfile called without authUserId — skipping")
+      console.warn("fetchProfile called with invalid authUserId, skipping")
       return
     }
     try {
@@ -58,16 +65,18 @@ export const AuthProvider = ({ children }) => {
 
       if (!isMounted) return
 
+      setLoading(true)
       setSession(newSession)
-      if (!newSession?.user?.id) {
+      if (newSession?.user?.id) {
+        setUser({ id: newSession.user.id })
+        await fetchProfile(newSession.user.id)
+      } else {
         setUser(null)
         setTripHistory([])
         setLoading(false)
         return
       }
 
-      setLoading(true)
-      await fetchProfile(newSession.user.id)
       setLoading(false)
     })
 

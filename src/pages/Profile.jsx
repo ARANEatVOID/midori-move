@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
 import { useAuth } from '../hooks/useAuth.jsx'
@@ -32,7 +32,7 @@ function getModeEmoji(mode) {
 
 function Profile() {
   const navigate = useNavigate()
-  const { user, session, loading: authLoading, fetchTrips, tripHistory, refreshUser } = useAuth()
+  const { user, tripHistory, loading, fetchTrips, refreshUser } = useAuth()
   
   const savedRoutes = Array.isArray(tripHistory) ? tripHistory : []
   const [routesLoading, setRoutesLoading] = useState(true)
@@ -44,9 +44,9 @@ function Profile() {
   const [profileUploadError, setProfileUploadError] = useState('')
 
   useEffect(() => {
-    if (authLoading) return
+    if (loading) return
 
-    if (!session?.user?.id) {
+    if (!user?.id) {
       setRoutesLoading(false)
       setLocationLoading(false)
       return
@@ -71,10 +71,10 @@ function Profile() {
     }
 
     loadLocation()
-  }, [session?.user?.id, authLoading, navigate])
+  }, [user?.id, loading, navigate])
 
   useEffect(() => {
-    if (!session?.user) return
+    if (!user?.id) return
 
     const loadSavedRoutes = async () => {
       try {
@@ -88,66 +88,66 @@ function Profile() {
     }
 
     loadSavedRoutes()
-  }, [session?.user, fetchTrips])
+  }, [user?.id, fetchTrips])
 
   useEffect(() => {
     console.log('AUTH USER:', user)
     console.log('TRIPS:', tripHistory)
   }, [user, tripHistory])
 
-  if (authLoading) {
+  useEffect(() => {
+    console.log('PROFILE USER UPDATED:', user)
+  }, [user])
+
+  if (loading) {
     return <div>Loading...</div>
   }
 
-  if (!session?.user) {
+  if (!user) {
     return <div>Please log in</div>
   }
 
-  const profileMetadataName = session?.user?.user_metadata?.full_name || session?.user?.user_metadata?.name
-  const profilePictureUrl = user?.profile_picture_url || session?.user?.user_metadata?.avatar_url || session?.user?.user_metadata?.picture
+  const profilePictureUrl = user?.profile_picture_url
+  const profileEmail = user?.email || 'No email provided'
 
-  const getUserDisplayName = useMemo(() => {
-    try {
-      if (user?.name) return user.name
-      if (profileMetadataName) return profileMetadataName
-      const email = session?.user?.email
-      if (typeof email === 'string' && email.includes('@')) {
-        return email.split('@')[0]
-      }
-    } catch (error) {
-      console.error('Error resolving display name:', error)
+  let displayName = 'User'
+  try {
+    if (user?.name) {
+      displayName = user.name
+    } else if (typeof profileEmail === 'string' && profileEmail.includes('@')) {
+      displayName = profileEmail.split('@')[0]
     }
-    return 'User'
-  }, [user?.name, profileMetadataName, session?.user?.email])
+  } catch (error) {
+    console.error('Error resolving display name:', error)
+  }
 
-  const initials = useMemo(() => {
-    try {
-      let nameSource = user?.name || profileMetadataName || session?.user?.email
-      if (!nameSource || typeof nameSource !== 'string') return 'MM'
-      if (nameSource.includes('@')) {
-        nameSource = nameSource.split('@')[0]
-      }
+  let initials = 'MM'
+  try {
+    let nameSource = user?.name || profileEmail
+    if (typeof nameSource === 'string' && nameSource.includes('@')) {
+      nameSource = nameSource.split('@')[0]
+    }
+    if (typeof nameSource === 'string' && nameSource.trim()) {
       const parts = nameSource.trim().split(/\s+/)
-      if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
-      return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase()
-    } catch (error) {
-      console.error('Error computing initials:', error)
-      return 'MM'
+      initials =
+        parts.length === 1
+          ? parts[0].charAt(0).toUpperCase()
+          : `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase()
     }
-  }, [user?.name, profileMetadataName, session?.user?.email])
+  } catch (error) {
+    console.error('Error computing initials:', error)
+  }
 
   // Calculate aggregate stats from trips
-  const aggregateStats = useMemo(() => {
-    if (!savedRoutes.length) {
-      return {
-        totalTrips: 0,
-        totalCarbonSaved: 0,
-        totalDistance: 0,
-        mostUsedMode: null,
-      }
-    }
+  let aggregateStats = {
+    totalTrips: 0,
+    totalCarbonSaved: 0,
+    totalDistance: 0,
+    mostUsedMode: null,
+  }
 
-    const stats = {
+  if (savedRoutes.length) {
+    aggregateStats = {
       totalTrips: savedRoutes.length,
       totalCarbonSaved: Number(
         savedRoutes.reduce((sum, route) => sum + (route.carbon_saved || 0), 0).toFixed(2)
@@ -158,31 +158,25 @@ function Profile() {
       mostUsedMode: null,
     }
 
-    // Calculate most used mode
     const modeCounts = {}
     savedRoutes.forEach((route) => {
       const mode = route.transport_mode || 'unknown'
       modeCounts[mode] = (modeCounts[mode] || 0) + 1
     })
 
-    const mostUsedModeKey = Object.keys(modeCounts).reduce((a, b) =>
+    aggregateStats.mostUsedMode = Object.keys(modeCounts).reduce((a, b) =>
       modeCounts[a] > modeCounts[b] ? a : b,
       null,
     )
-    stats.mostUsedMode = mostUsedModeKey
+  }
 
-    return stats
-  }, [savedRoutes])
-
-  const locationBadge = useMemo(() => {
-    if (!currentLocation?.source) return ''
-    const map = {
-      gps: '📍 Precise',
-      ip: '🌐 Approximate',
-      fallback: '⚠️ Default',
-    }
-    return map[currentLocation.source] || '🌐 Approximate'
-  }, [currentLocation])
+  const locationBadge = !currentLocation?.source
+    ? ''
+    : {
+        gps: '📍 Precise',
+        ip: '🌐 Approximate',
+        fallback: '⚠️ Default',
+      }[currentLocation.source] || '🌐 Approximate'
 
   const handleLogout = async () => {
     try {
@@ -259,12 +253,12 @@ function Profile() {
     try {
       const publicUrl = await uploadProfileImage(file)
 
-      if (publicUrl && session?.user?.id) {
+      if (publicUrl && user?.id) {
         // Update profile in database using maybeSingle to avoid PGRST116
         const { error } = await supabase
           .from('profiles')
           .update({ profile_picture_url: publicUrl })
-          .eq('id', session.user.id)
+          .eq('id', user.id)
 
         if (error) throw error
 
@@ -314,7 +308,7 @@ function Profile() {
             {profilePictureUrl ? (
               <img
                 src={profilePictureUrl}
-                alt={getUserDisplayName}
+                alt={displayName}
                 className="h-full w-full rounded-full object-cover"
               />
             ) : (
@@ -352,8 +346,8 @@ function Profile() {
               {profilePictureUrl ? 'Change profile picture' : 'Add profile picture'}
             </label>
           </div>
-          <h1 className="text-3xl font-serif tracking-tight text-white">{getUserDisplayName}</h1>
-          <p className="mt-2 text-sm text-white/80">{session?.user?.email || 'No email provided'}</p>
+          <h1 className="text-3xl font-serif tracking-tight text-white">{user?.name || displayName || 'No Name'}</h1>
+          <p className="mt-2 text-sm text-white/80">{profileEmail}</p>
           <p className="mt-4 text-sm text-white/75">🌍 {user?.country || 'Unknown country'}</p>
           <button
             type="button"
