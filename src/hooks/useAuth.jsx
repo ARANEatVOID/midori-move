@@ -12,8 +12,7 @@ export const AuthProvider = ({ children }) => {
   // Fetch profile from "profiles" table by auth user id
   const fetchProfile = useCallback(async (authUserId) => {
     if (!authUserId) {
-      setUser(null)
-      setTripHistory([])
+      console.warn("fetchProfile called without authUserId — skipping")
       return
     }
     try {
