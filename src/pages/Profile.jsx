@@ -47,7 +47,8 @@ function Profile() {
     if (authLoading) return
 
     if (!session?.user?.id) {
-      navigate('/login', { replace: true })
+      setRoutesLoading(false)
+      setLocationLoading(false)
       return
     }
 
@@ -87,15 +88,19 @@ function Profile() {
     }
 
     loadSavedRoutes()
-  }, [session, fetchTrips])
+  }, [session?.user, fetchTrips])
 
   useEffect(() => {
     console.log('AUTH USER:', user)
     console.log('TRIPS:', tripHistory)
   }, [user, tripHistory])
 
-  if (authLoading || !session?.user) {
-    return null
+  if (authLoading) {
+    return <div>Loading...</div>
+  }
+
+  if (!session?.user) {
+    return <div>Please log in</div>
   }
 
   const profileMetadataName = session?.user?.user_metadata?.full_name || session?.user?.user_metadata?.name
@@ -284,6 +289,8 @@ function Profile() {
     if (!text) return 'Unknown'
     return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text
   }
+
+  console.log('RENDER TRIPS:', tripHistory)
 
   return (
     <motion.section
