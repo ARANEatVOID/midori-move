@@ -48,39 +48,54 @@ export const AuthProvider = ({ children }) => {
   }, [fetchProfile])
 
   useEffect(() => {
-    const getInitialSession = async () => {
-      setLoading(true)
-      try {
-        const { data, error } = await supabase.auth.getSession()
-        if (error) throw error
+    let isMounted = true
 
-        setSession(data.session)
-        await fetchProfile(data.session?.user?.id)
-      } catch (error) {
-        console.error("Error fetching initial session:", error)
-        setUser(null)
-        setSession(null)
-        setTripHistory([])
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    getInitialSession()
+    setLoading(true)
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      setLoading(true)
+      console.log("AUTH EVENT:", event, newSession)
+
+      if (!isMounted) return
+
       setSession(newSession)
       if (!newSession?.user?.id) {
+        setUser(null)
         setTripHistory([])
+        setLoading(false)
+        return
       }
-      await fetchProfile(newSession?.user?.id)
+
+      setLoading(true)
+      await fetchProfile(newSession.user.id)
       setLoading(false)
     })
 
+    supabase.auth
+      .getSession()
+      .then(async ({ data, error }) => {
+        if (error) {
+          console.error("Error fetching initial session:", error)
+          return
+        }
+
+        console.log("FALLBACK SESSION:", data.session)
+
+        if (!isMounted) return
+
+        if (data.session?.user?.id) {
+          setSession(data.session)
+          await fetchProfile(data.session.user.id)
+          setLoading(false)
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching initial session:", error)
+      })
+
     return () => {
+      isMounted = false
       subscription?.unsubscribe()
     }
   }, [fetchProfile])
