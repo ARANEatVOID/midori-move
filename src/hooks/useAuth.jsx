@@ -14,7 +14,6 @@ export const AuthProvider = ({ children }) => {
     if (!authUserId) {
       setUser(null)
       setTripHistory([])
-      setLoading(false)
       return
     }
     try {
@@ -34,8 +33,6 @@ export const AuthProvider = ({ children }) => {
       console.error("Error fetching profile:", error)
       // Even if profile fetch fails, keep auth uid so trips can still be inserted
       setUser({ id: authUserId })
-    } finally {
-      setLoading(false)
     }
   }, [])
 
@@ -47,12 +44,12 @@ export const AuthProvider = ({ children }) => {
     } else {
       setUser(null)
       setTripHistory([])
-      setLoading(false)
     }
   }, [fetchProfile])
 
   useEffect(() => {
     const getInitialSession = async () => {
+      setLoading(true)
       try {
         const { data, error } = await supabase.auth.getSession()
         if (error) throw error
@@ -80,6 +77,7 @@ export const AuthProvider = ({ children }) => {
         setTripHistory([])
       }
       await fetchProfile(newSession?.user?.id)
+      setLoading(false)
     })
 
     return () => {
