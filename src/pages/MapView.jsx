@@ -7,6 +7,7 @@ import { motion } from 'framer-motion'
 import { Bus, Crosshair, Footprints, LoaderCircle, Search, Bike, Train } from 'lucide-react'
 import { App } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
+import polyline from '@mapbox/polyline'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
@@ -151,6 +152,102 @@ function getLocationStatusMessage(source) {
   if (source === 'gps') return 'Using precise location 📍'
   if (source === 'ip') return 'Using approximate location 🌐'
   return 'Using default location ⚠️'
+}
+
+function isValidLatLngPair(point) {
+  return (
+    Array.isArray(point) &&
+    point.length >= 2 &&
+    Number.isFinite(point[0]) &&
+    Number.isFinite(point[1]) &&
+    Math.abs(point[0]) <= 90 &&
+    Math.abs(point[1]) <= 180
+  )
+}
+
+function getEndpointScore(points, originPoint, destinationPoint) {
+  if (!Array.isArray(points) || points.length === 0) return Number.POSITIVE_INFINITY
+
+  const firstPoint = points[0]
+  const lastPoint = points[points.length - 1]
+  if (!isValidLatLngPair(firstPoint) || !isValidLatLngPair(lastPoint)) {
+    return Number.POSITIVE_INFINITY
+  }
+
+  const endpointPairs = [
+    [firstPoint, originPoint, lastPoint, destinationPoint],
+    [firstPoint, destinationPoint, lastPoint, originPoint],
+  ]
+
+  return endpointPairs.reduce((bestScore, [start, startTarget, end, endTarget]) => {
+    if (!isValidLatLngPair(startTarget) || !isValidLatLngPair(endTarget)) {
+      return bestScore
+    }
+
+    const score =
+      Math.abs(start[0] - startTarget[0]) +
+      Math.abs(start[1] - startTarget[1]) +
+      Math.abs(end[0] - endTarget[0]) +
+      Math.abs(end[1] - endTarget[1])
+
+    return Math.min(bestScore, score)
+  }, Number.POSITIVE_INFINITY)
+}
+
+function normalizeRouteGeometry(geometry, originPoint, destinationPoint) {
+  if (typeof geometry === 'string') {
+    try {
+      const decodedGeometry = polyline.decode(geometry)
+      return decodedGeometry.filter(isValidLatLngPair)
+    } catch (error) {
+      console.error('Failed to decode route geometry:', error)
+      return []
+    }
+  }
+
+  if (!Array.isArray(geometry)) {
+    return []
+  }
+
+  const numericPairs = geometry
+    .filter((point) => Array.isArray(point) && point.length >= 2)
+    .map(([first, second]) => [Number(first), Number(second)])
+
+  if (numericPairs.length === 0) {
+    return []
+  }
+
+  const latLngPairs = numericPairs.filter(isValidLatLngPair)
+  const swappedPairs = numericPairs
+    .map(([lng, lat]) => [lat, lng])
+    .filter(isValidLatLngPair)
+
+  if (latLngPairs.length === 0) {
+    return swappedPairs
+  }
+
+  if (swappedPairs.length === 0) {
+    return latLngPairs
+  }
+
+  const latLngScore = getEndpointScore(latLngPairs, originPoint, destinationPoint)
+  const swappedScore = getEndpointScore(swappedPairs, originPoint, destinationPoint)
+
+  return swappedScore < latLngScore ? swappedPairs : latLngPairs
+}
+
+function normalizeRoutesForMap(foundRoutes, originCoords, destinationCoords) {
+  if (!Array.isArray(foundRoutes)) {
+    return []
+  }
+
+  const originPoint = [Number(originCoords?.lat), Number(originCoords?.lng)]
+  const destinationPoint = [Number(destinationCoords?.lat), Number(destinationCoords?.lng)]
+
+  return foundRoutes.map((route) => ({
+    ...route,
+    geometry: normalizeRouteGeometry(route?.geometry, originPoint, destinationPoint),
+  }))
 }
 
 function MapView() {
@@ -304,7 +401,8 @@ function MapView() {
         try {
           const foundRoutes = await getAllSustainableRoutes(restoredOrigin, restoredDestination)
           if (foundRoutes && foundRoutes.length > 0) {
-            setRoutes(foundRoutes)
+            const fixedRoutes = normalizeRoutesForMap(foundRoutes, restoredOrigin, restoredDestination)
+            setRoutes(fixedRoutes)
             setSelectedRouteIndex(0)
             
             // Fetch nearby stops
@@ -480,10 +578,11 @@ function MapView() {
       if (!foundRoutes || foundRoutes.length === 0) {
         setRouteError('No sustainable routes were found.')
       } else {
-        setRoutes(foundRoutes)
+        const fixedRoutes = normalizeRoutesForMap(foundRoutes, activeOrigin, destination)
+        setRoutes(fixedRoutes)
         setSelectedRouteIndex(0)
 
-        const primaryRoute = foundRoutes[0]
+        const primaryRoute = fixedRoutes[0]
         const initialMode = normalizeTransportMode(primaryRoute.mode)
 
         setTransportMode(initialMode)
@@ -719,7 +818,8 @@ function MapView() {
                   </Marker>
                 )
               })}
-              {routeSummaries[selectedRouteIndex]?.geometry ? (
+              {Array.isArray(routeSummaries[selectedRouteIndex]?.geometry) &&
+              routeSummaries[selectedRouteIndex].geometry.length > 0 ? (
                 <Polyline
                   positions={routeSummaries[selectedRouteIndex].geometry}
                   pathOptions={{ color: '#34c96c', weight: 5, opacity: 0.8 }}
