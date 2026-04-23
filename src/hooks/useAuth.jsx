@@ -13,6 +13,7 @@ export const AuthProvider = ({ children }) => {
   const fetchProfile = useCallback(async (authUserId) => {
     if (!authUserId) {
       setUser(null)
+      setLoading(false)
       return
     }
     try {
@@ -22,13 +23,18 @@ export const AuthProvider = ({ children }) => {
         .eq("id", authUserId)
         .maybeSingle()
 
-      if (error) throw error
+      if (error) {
+        console.error('Profile fetch error:', error)
+        throw error
+      }
       // Merge auth uid into profile so user.id is always auth.uid()
       setUser(profileData ? { ...profileData, id: authUserId } : { id: authUserId })
     } catch (error) {
       console.error("Error fetching profile:", error)
       // Even if profile fetch fails, keep auth uid so trips can still be inserted
       setUser({ id: authUserId })
+    } finally {
+      setLoading(false)
     }
   }, [])
 

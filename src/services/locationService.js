@@ -144,6 +144,7 @@ async function getIpLocation() {
       source: 'ip',
     }
   } catch (error) {
+    console.error('IP geolocation fetch error:', error)
     console.debug('IP geolocation fallback failed, using default location')
     return null
   }
@@ -203,6 +204,7 @@ async function reverseGeocode(lat, lng) {
       countryCode: address.country_code ? address.country_code.toUpperCase() : 'DEFAULT',
     }
   } catch (error) {
+    console.error('Reverse geocoding error:', error)
     return Promise.reject(error?.message || 'Unable to reverse geocode this location.')
   }
 }
@@ -237,7 +239,8 @@ async function searchPlace(query) {
       lng: Number(place.lon),
       type: place.type ?? place.addresstype ?? 'place',
     }))
-  } catch {
+  } catch (error) {
+    console.error('Place search error:', error)
     return []
   }
 }
