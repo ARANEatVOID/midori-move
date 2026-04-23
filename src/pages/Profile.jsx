@@ -34,7 +34,7 @@ function Profile() {
   const navigate = useNavigate()
   const { user, session, loading: authLoading, fetchTrips, tripHistory, refreshUser } = useAuth()
   
-  const savedRoutes = tripHistory || []
+  const savedRoutes = Array.isArray(tripHistory) ? tripHistory : []
   const [routesLoading, setRoutesLoading] = useState(true)
   const [currentLocation, setCurrentLocation] = useState(null)
   const [locationLoading, setLocationLoading] = useState(true)
@@ -43,27 +43,13 @@ function Profile() {
   const [profileUploading, setProfileUploading] = useState(false)
   const [profileUploadError, setProfileUploadError] = useState('')
 
-  // Fetch saved routes from Supabase
   useEffect(() => {
     if (authLoading) return
-    
+
     if (!session?.user?.id) {
       navigate('/login', { replace: true })
       return
     }
-
-    const loadSavedRoutes = async () => {
-      try {
-        setRoutesLoading(true)
-        await fetchTrips()
-      } catch (error) {
-        console.error('Error loading trips:', error)
-      } finally {
-        setRoutesLoading(false)
-      }
-    }
-
-    loadSavedRoutes()
 
     // Fetch current location
     const loadLocation = async () => {
@@ -85,6 +71,28 @@ function Profile() {
 
     loadLocation()
   }, [session?.user?.id, authLoading, navigate])
+
+  useEffect(() => {
+    if (!session?.user) return
+
+    const loadSavedRoutes = async () => {
+      try {
+        setRoutesLoading(true)
+        await fetchTrips()
+      } catch (error) {
+        console.error('Error loading trips:', error)
+      } finally {
+        setRoutesLoading(false)
+      }
+    }
+
+    loadSavedRoutes()
+  }, [session, fetchTrips])
+
+  useEffect(() => {
+    console.log('AUTH USER:', user)
+    console.log('TRIPS:', tripHistory)
+  }, [user, tripHistory])
 
   if (authLoading || !session?.user) {
     return null
