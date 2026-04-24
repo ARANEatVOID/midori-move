@@ -191,7 +191,7 @@ function Profile() {
   const handleDeleteRoute = async (tripId) => {
     try {
       const { error } = await supabase
-        .from('saved_routes')
+        .from('trips')
         .delete()
         .eq('id', tripId)
 

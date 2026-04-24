@@ -1,14 +1,15 @@
 import { createClient } from "@supabase/supabase-js"
-import { Preferences } from '@capacitor/preferences'
+import { Capacitor } from "@capacitor/core"
+import { Preferences } from "@capacitor/preferences"
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Supabase env vars missing. Check Vercel environment variable names.')
+  console.error("Supabase env vars missing. Check Vercel environment variable names.")
 }
 
-const customStorage = {
+const capacitorStorage = {
   getItem: async (key) => {
     const { value } = await Preferences.get({ key })
     return value
@@ -21,9 +22,11 @@ const customStorage = {
   },
 }
 
+const authStorage = Capacitor.isNativePlatform() ? capacitorStorage : undefined
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: customStorage,
+    ...(authStorage ? { storage: authStorage } : {}),
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

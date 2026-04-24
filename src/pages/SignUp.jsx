@@ -88,13 +88,16 @@ function SignUp() {
     setSubmissionError('')
 
     try {
-      // Create auth user first
-      const { error: authError } = await supabase.auth.signUp({
+      // Create auth user. name + country are stashed in user_metadata so the
+      // handle_new_user() trigger can seed a profile row even when email
+      // confirmation is enabled (no client session yet).
+      const { data: signUpData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
           data: {
             name: data.fullName,
+            country: data.country?.value ?? 'DEFAULT',
           },
         },
       })
@@ -109,36 +112,26 @@ function SignUp() {
         return
       }
 
-      let user = null
-      for (let i = 0; i < 5; i++) {
-        const res = await supabase.auth.getUser()
-        user = res.data.user
+      // If we got a session back (email-confirm disabled), upsert the profile
+      // row from the client so name/country are guaranteed correct even if the
+      // trigger is missing. If there's no session, the DB trigger handles it.
+      if (signUpData?.session?.user?.id) {
+        const { error: profileUpsertError } = await supabase
+          .from('profiles')
+          .upsert(
+            {
+              id: signUpData.session.user.id,
+              name: data.fullName,
+              country: data.country?.value ?? 'DEFAULT',
+              profile_picture_url: null,
+            },
+            { onConflict: 'id' },
+          )
 
-        if (user) break
-        await new Promise((resolve) => setTimeout(resolve, 300))
-      }
-
-      if (!user) {
-        throw new Error('User session not established after signup')
-      }
-
-      console.log('USER BEFORE INSERT:', user)
-      console.log('USER ID:', user?.id)
-
-      const userId = user.id
-
-      const { error: profileInsertError } = await supabase.from('profiles').insert({
-        id: userId,
-        name: data.fullName,
-        country: data.country?.value ?? 'DEFAULT',
-        profile_picture_url: null,
-      })
-
-      if (profileInsertError) {
-        console.error('Error inserting profile:', profileInsertError)
-        setSubmissionError('Failed to create user profile. Please try again.')
-        setLoading(false)
-        return
+        if (profileUpsertError) {
+          // Non-fatal: the trigger should have already created the row.
+          console.error('Profile upsert warning:', profileUpsertError)
+        }
       }
 
       setLoading(false)

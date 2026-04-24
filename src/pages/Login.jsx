@@ -52,12 +52,12 @@ function Login() {
         return
       }
 
-      // Fetch user's profile
+      // Fetch user's profile (maybeSingle so missing row is not an error)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single()
+        .maybeSingle()
 
       if (profileError) {
         console.error('Error fetching profile:', profileError)
@@ -66,7 +66,12 @@ function Login() {
         return
       }
 
-      setLoginSuccess(`Welcome back, ${profileData.name}! 🌿`)
+      const greetingName =
+        profileData?.name?.trim() ||
+        authData.user?.user_metadata?.name ||
+        (typeof data.email === 'string' ? data.email.split('@')[0] : 'traveler')
+
+      setLoginSuccess(`Welcome back, ${greetingName}! 🌿`)
       setLoading(false)
 
       window.setTimeout(() => {
